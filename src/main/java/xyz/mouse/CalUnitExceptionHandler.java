@@ -1,4 +1,4 @@
-package src.main.java.xyz.mouse;
+package xyz.mouse;
 
 @FunctionalInterface
 public interface CalUnitExceptionHandler {

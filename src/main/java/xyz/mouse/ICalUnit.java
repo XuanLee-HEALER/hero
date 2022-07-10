@@ -1,4 +1,4 @@
-package src.main.java.xyz.mouse;
+package xyz.mouse;
 
 import java.util.Queue;
 import java.util.Set;
