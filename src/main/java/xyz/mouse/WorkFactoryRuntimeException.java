@@ -1,4 +1,4 @@
-package src.main.java.xyz.mouse;
+package xyz.mouse;
 
 public class WorkFactoryRuntimeException extends RuntimeException {
 

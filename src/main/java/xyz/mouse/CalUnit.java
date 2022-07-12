@@ -1,8 +1,11 @@
 package xyz.mouse;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class CalUnit<T> implements ICalUnit<T> {
 
@@ -14,30 +17,54 @@ public class CalUnit<T> implements ICalUnit<T> {
     private Map<String, BlockingQueue<Future<T>>> finishedCallableResQueue;
     private Map<String, BlockingQueue<Future<?>>> finishedRunnableResQueue;
 
+    private static volatile CalUnit _calUnit;
+    private static final Lock initLock = new ReentrantLock();
+
     private CalUnit() {
         // 读取配置文件
-
+        try (var resource = getClass().getClassLoader().getResourceAsStream("cal.properties")) {
+            var p = new Properties();
+            p.load(resource);
+            for (var t: p.keySet()) {
+                System.out.printf("key: %s, val: %s\n", t, p.get(t));
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new WorkFactoryRuntimeException("读取配置文件失败");
+        }
     }
 
-    public static <T> CalUnit<T> getInstance() {
-        CalUnit<T> calUnit = new CalUnit<>();
-        calUnit.counter = new AtomicInteger(0);
-        calUnit.pool = new ForkJoinPool();
-        calUnit.callableResQueue = new LinkedHashMap<>();
-        calUnit.runnableResQueue = new LinkedHashMap<>();
-        return calUnit;
+    public static <T> CalUnit<T> getInstance(Class<T> clazz) {
+        // while (true) {
+        //     try {
+        //         if (initLock.tryLock(50, TimeUnit.MILLISECONDS)) break;
+        //     } catch (InterruptedException e) {
+        //         throw new RuntimeException(e);
+        //     }
+        // }
+        // System.out.println("pass");
+        initLock.lock();
+        if (_calUnit == null) {
+            _calUnit = new CalUnit<T>();
+            _calUnit.counter = new AtomicInteger(0);
+            _calUnit.pool = new ForkJoinPool();
+            _calUnit.callableResQueue = new LinkedHashMap<>();
+            _calUnit.runnableResQueue = new LinkedHashMap<>();
+        }
+        initLock.unlock();
+        return _calUnit;
     }
 
     public void setCallableResultQueue(String id, BlockingQueue<Future<T>> queue) {
         if (this.callableResQueue.containsKey(id)) {
-            throw new src.main.java.xyz.mouse.WorkFactoryRuntimeException("线程" + id + "结果队列以存在，添加队列失败");
+            throw new WorkFactoryRuntimeException("线程" + id + "结果队列以存在，添加队列失败");
         }
         this.callableResQueue.put(id, queue);
     }
 
     public void setRunnableResultQueue(String id, BlockingQueue<Future<?>> queue) {
         if (this.runnableResQueue.containsKey(id)) {
-            throw new src.main.java.xyz.mouse.WorkFactoryRuntimeException("线程" + id + "结果队列以存在，添加队列失败");
+            throw new WorkFactoryRuntimeException("线程" + id + "结果队列以存在，添加队列失败");
         }
         this.runnableResQueue.put(id, queue);
     }
@@ -49,7 +76,7 @@ public class CalUnit<T> implements ICalUnit<T> {
     public void submit(String id, Callable<T> work) {
         counter.getAndIncrement();
         if (!this.callableResQueue.containsKey(id)) {
-            throw new src.main.java.xyz.mouse.WorkFactoryRuntimeException("请先注册结果队列再提交工作任务");
+            throw new WorkFactoryRuntimeException("请先注册结果队列再提交工作任务");
         }
         BlockingQueue<Future<T>> q = this.callableResQueue.get(id);
         q.add(this.pool.submit(work));
@@ -57,7 +84,7 @@ public class CalUnit<T> implements ICalUnit<T> {
 
     public void submit(String id, Runnable work) {
         if (!this.runnableResQueue.containsKey(id)) {
-            throw new src.main.java.xyz.mouse.WorkFactoryRuntimeException("请先注册结果队列再提交工作任务");
+            throw new WorkFactoryRuntimeException("请先注册结果队列再提交工作任务");
         }
         BlockingQueue<Future<?>> q = this.runnableResQueue.get(id);
         q.add(this.pool.submit(work));
@@ -100,7 +127,7 @@ public class CalUnit<T> implements ICalUnit<T> {
             cur.addAll(tl);
             return cur.poll();
         } else {
-            throw new src.main.java.xyz.mouse.WorkFactoryRuntimeException("该线程未注册带返回值的结果队列");
+            throw new WorkFactoryRuntimeException("该线程未注册带返回值的结果队列");
         }
     }
 
@@ -114,7 +141,7 @@ public class CalUnit<T> implements ICalUnit<T> {
             cur.addAll(tl);
             return cur.poll();
         } else {
-            throw new src.main.java.xyz.mouse.WorkFactoryRuntimeException("该线程未注册无返回值的结果队列");
+            throw new WorkFactoryRuntimeException("该线程未注册无返回值的结果队列");
         }
     }
 
